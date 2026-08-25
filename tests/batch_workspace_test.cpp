@@ -725,7 +725,7 @@ void test_device_materialized_jacobi_workspace_estimate() {
             bfnew::BatchWorkspaceStrategyTiming{0U, 1U}));
       },
       "device-materialized estimation rejects fictitious host run-build time");
-  for (const std::pair<BatchVertexStorageStrategy, std::uint32_t> invalid : {
+  for (const std::pair<BatchVertexStorageStrategy, std::uint32_t>& invalid : {
            std::pair{
                BatchVertexStorageStrategy::compact_union_tiles, 2U},
            std::pair{

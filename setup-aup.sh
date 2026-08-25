@@ -303,6 +303,11 @@ configure_persistent_environment() {
     printf 'export BFNEW_FPGA24_DATA_ROOT=%q\n' "$FPGA24_DIR"
     printf 'export BFNEW_FPGA24_SCHEMA_ROOT=%q\n' \
       "$FPGA24_DIR/fpga-interchange-schema/interchange"
+    printf 'export CPU_BUILD=%q\n' "$BFNEW_DIR/build/aup-cpu"
+    printf 'export HIP_BUILD=%q\n' "$BFNEW_DIR/build/aup-hip"
+    printf 'export CAMPAIGN_BUILD=%q\n' "$BFNEW_DIR/build/aup-campaign"
+    printf 'export WORKLOAD_ROOT=%q\n' "$BFNEW_DIR/out/aup-workload"
+    printf 'export EVIDENCE=%q\n' "$BFNEW_DIR/build/aup-evidence"
     printf 'export ROCM_PATH=%q\n' "$rocm_root"
     printf '%s\n' \
       'export PATH="$BFNEW_TOOLS/bin:$ROCM_PATH/bin:$PATH"' \

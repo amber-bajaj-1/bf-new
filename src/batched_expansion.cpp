@@ -72,12 +72,12 @@ void checked_add(
 [[nodiscard]] std::uint64_t elapsed_nanoseconds(
     const std::chrono::steady_clock::time_point begin,
     const std::chrono::steady_clock::time_point end) noexcept {
-  const auto count =
+  using Count = std::chrono::nanoseconds::rep;
+  const Count count =
       std::chrono::duration_cast<std::chrono::nanoseconds>(end - begin).count();
   if (count <= 0) {
     return 0U;
   }
-  using Count = decltype(count);
   if constexpr (sizeof(Count) > sizeof(std::uint64_t)) {
     if (count > static_cast<Count>(std::numeric_limits<std::uint64_t>::max())) {
       return std::numeric_limits<std::uint64_t>::max();
