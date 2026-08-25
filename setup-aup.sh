@@ -133,6 +133,7 @@ clone_bfnew() {
 
 contest_data_is_ready() {
   local benchmark
+  local schema
 
   [[ -s "$FPGA24_DIR/xcvu3p.device" ]] || return 1
   for benchmark in "${BENCHMARKS[@]}"; do
@@ -149,13 +150,56 @@ contest_data_is_ready() {
   done
 }
 
+report_missing_contest_artifacts() {
+  local benchmark
+  local schema
+
+  [[ -s "$FPGA24_DIR/xcvu3p.device" ]] ||
+    printf '  missing: %s\n' "$FPGA24_DIR/xcvu3p.device" >&2
+  for benchmark in "${BENCHMARKS[@]}"; do
+    [[ -s "$FPGA24_DIR/${benchmark}_unrouted.phys" ]] ||
+      printf '  missing: %s\n' \
+        "$FPGA24_DIR/${benchmark}_unrouted.phys" >&2
+    [[ -s "$FPGA24_DIR/${benchmark}.netlist" ]] ||
+      printf '  missing: %s\n' "$FPGA24_DIR/${benchmark}.netlist" >&2
+  done
+  for schema in \
+    References.capnp \
+    LogicalNetlist.capnp \
+    DeviceResources.capnp \
+    PhysicalNetlist.capnp; do
+    [[ -s "$FPGA24_DIR/fpga-interchange-schema/interchange/$schema" ]] ||
+      printf '  missing: %s\n' \
+        "$FPGA24_DIR/fpga-interchange-schema/interchange/$schema" >&2
+  done
+}
+
+place_archive_artifact_at_root() {
+  local root="$1"
+  local filename="$2"
+  local expected="$root/$filename"
+  local -a matches=()
+
+  [[ -s "$expected" ]] && return
+  while IFS= read -r -d '' match; do
+    matches+=("$match")
+  done < <(find "$root" -mindepth 2 -type f -name "$filename" -print0)
+
+  [[ "${#matches[@]}" -eq 1 ]] ||
+    die "Expected exactly one $filename in the downloaded benchmark archive."
+  mv -- "${matches[0]}" "$expected"
+}
+
 prepare_contest_data() {
   if contest_data_is_ready; then
     log "Using existing FPGA24 data at $FPGA24_DIR"
     return
   fi
-  [[ ! -e "$FPGA24_DIR" ]] ||
-    die "$FPGA24_DIR is incomplete; move it aside and rerun setup."
+  if [[ -d "$FPGA24_DIR" ]]; then
+    log "Repairing incomplete FPGA24 data at $FPGA24_DIR"
+  elif [[ -e "$FPGA24_DIR" ]]; then
+    die "$FPGA24_DIR exists but is not a directory."
+  fi
 
   local source_archive="$DOWNLOAD_CACHE/fpga24-source-${FPGA24_SOURCE_REVISION}.tar.gz"
   local schema_archive="$DOWNLOAD_CACHE/fpga-interchange-schema-${FPGA24_SCHEMA_REVISION}.tar.gz"
@@ -187,23 +231,55 @@ prepare_contest_data() {
   staged_contest="$(single_extracted_directory "$source_unpack")"
   staged_schema="$(single_extracted_directory "$schema_unpack")"
 
-  # The source archive does not contain Git submodule contents. bf-new needs the
-  # FPGA Interchange schemas, so install the exact pinned schema tree directly.
-  mv -- "$staged_schema" "$staged_contest/fpga-interchange-schema"
+  # GitHub source archives may preserve an empty submodule placeholder. Copying
+  # the schema contents into that path avoids accidentally nesting the schema
+  # repository one directory too deep.
+  mkdir -p "$staged_contest/fpga-interchange-schema"
+  cp -a -- "$staged_schema/." "$staged_contest/fpga-interchange-schema/"
   tar -xzf "$benchmark_archive" -C "$staged_contest" \
     --no-same-owner --no-same-permissions
   cp -- "$device_download" "$staged_contest/xcvu3p.device"
 
-  mv -- "$staged_contest" "$FPGA24_DIR"
+  local benchmark
+  for benchmark in "${BENCHMARKS[@]}"; do
+    place_archive_artifact_at_root \
+      "$staged_contest" "${benchmark}_unrouted.phys"
+    place_archive_artifact_at_root \
+      "$staged_contest" "${benchmark}.netlist"
+  done
+
+  if [[ -d "$FPGA24_DIR" ]]; then
+    # Preserve any existing contest source and completed large downloads. Fill
+    # only the required benchmark/device inputs, and refresh the pinned schemas.
+    mkdir -p "$FPGA24_DIR/fpga-interchange-schema"
+    cp -a -- \
+      "$staged_contest/fpga-interchange-schema/." \
+      "$FPGA24_DIR/fpga-interchange-schema/"
+    [[ -s "$FPGA24_DIR/xcvu3p.device" ]] ||
+      cp -- "$staged_contest/xcvu3p.device" "$FPGA24_DIR/xcvu3p.device"
+    for benchmark in "${BENCHMARKS[@]}"; do
+      [[ -s "$FPGA24_DIR/${benchmark}_unrouted.phys" ]] ||
+        cp -- \
+          "$staged_contest/${benchmark}_unrouted.phys" \
+          "$FPGA24_DIR/${benchmark}_unrouted.phys"
+      [[ -s "$FPGA24_DIR/${benchmark}.netlist" ]] ||
+        cp -- \
+          "$staged_contest/${benchmark}.netlist" \
+          "$FPGA24_DIR/${benchmark}.netlist"
+    done
+  else
+    mv -- "$staged_contest" "$FPGA24_DIR"
+  fi
   trap - EXIT
   rm -rf -- "$staging_root"
 
-  contest_data_is_ready ||
-    die "FPGA24 setup completed, but one or more required artifacts are missing."
+  if ! contest_data_is_ready; then
+    report_missing_contest_artifacts
+    die "FPGA24 setup completed, but the artifacts listed above are missing."
+  fi
 
   # These are benchmark inputs, not output locations.
   chmod a-w "$FPGA24_DIR/xcvu3p.device"
-  local benchmark
   for benchmark in "${BENCHMARKS[@]}"; do
     chmod a-w \
       "$FPGA24_DIR/${benchmark}_unrouted.phys" \
