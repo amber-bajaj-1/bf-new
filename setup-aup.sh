@@ -30,6 +30,13 @@ readonly FPGA24_SCHEMA_URL="https://github.com/chipsalliance/fpga-interchange-sc
 readonly FPGA24_BENCHMARKS_URL="https://github.com/Xilinx/fpga24_routing_contest/releases/latest/download/benchmarks.tar.gz"
 readonly FPGA24_DEVICE_URL="https://github.com/Xilinx/fpga24_routing_contest/releases/latest/download/xcvu3p.device"
 
+# Cap'n Proto's exported CMake targets require pkg-config. AUP does not provide
+# it, so install a pinned pkgconf release into the same persistent user prefix
+# as CMake and Cap'n Proto. This requires no administrator permissions.
+readonly PKGCONF_VERSION="3.0.5"
+readonly PKGCONF_URL="https://distfiles.ariadne.space/pkgconf/pkgconf-${PKGCONF_VERSION}.tar.xz"
+readonly PKGCONF_SHA256="3acd3a8a3cce65a8d620321855d92fb602e026cbe8e13ee36bdec58483b59ace"
+
 readonly BFNEW_DIR="${AUP_WORKSPACE_ROOT}/bf-new"
 readonly FPGA24_DIR="${AUP_WORKSPACE_ROOT}/fpga24_routing_contest"
 readonly DOWNLOAD_CACHE="${AUP_WORKSPACE_ROOT}/download-cache"
@@ -106,6 +113,23 @@ validate_tar_paths() {
   done < <(tar -tzf "$archive")
 }
 
+validate_xz_tar_paths() {
+  local archive="$1"
+  local entry
+
+  tar -tJf "$archive" >/dev/null 2>&1 ||
+    die "Downloaded file is not a valid xz-compressed tar archive: $archive"
+
+  while IFS= read -r entry; do
+    [[ "$entry" != /* &&
+       "$entry" != ".." &&
+       "$entry" != ../* &&
+       "$entry" != */../* &&
+       "$entry" != */.. ]] ||
+      die "Unsafe path in archive $archive: $entry"
+  done < <(tar -tJf "$archive")
+}
+
 single_extracted_directory() {
   local parent="$1"
   local -a directories=()
@@ -117,6 +141,61 @@ single_extracted_directory() {
   [[ "${#directories[@]}" -eq 1 ]] ||
     die "Expected exactly one top-level directory below $parent"
   printf '%s\n' "${directories[0]}"
+}
+
+install_pkg_config() {
+  local pkg_config="$BFNEW_TOOLS/bin/pkg-config"
+  local pkgconf="$BFNEW_TOOLS/bin/pkgconf"
+
+  if [[ -x "$pkg_config" ]]; then
+    log "Using existing $($pkg_config --version) pkg-config at $pkg_config"
+    return
+  fi
+  if [[ -x "$pkgconf" ]]; then
+    [[ ! -e "$pkg_config" && ! -L "$pkg_config" ]] ||
+      die "$pkg_config exists but is not executable."
+    ln -s pkgconf "$pkg_config"
+    log "Registered existing pkgconf as $pkg_config"
+    return
+  fi
+
+  require_command cc
+  require_command make
+  require_command sha256sum
+
+  local archive="$DOWNLOAD_CACHE/pkgconf-${PKGCONF_VERSION}.tar.xz"
+  download "$PKGCONF_URL" "$archive"
+  printf '%s  %s\n' "$PKGCONF_SHA256" "$archive" | sha256sum --check - ||
+    die "pkgconf archive checksum verification failed."
+  validate_xz_tar_paths "$archive"
+
+  local staging_root
+  staging_root="$(mktemp -d "${AUP_WORKSPACE_ROOT}/.pkgconf-staging.XXXXXX")"
+  trap 'rm -rf -- "${staging_root:-}"' EXIT
+  tar -xJf "$archive" -C "$staging_root" \
+    --no-same-owner --no-same-permissions
+
+  local source_root
+  source_root="$(single_extracted_directory "$staging_root")"
+  log "Building pkgconf $PKGCONF_VERSION in the persistent user tool prefix"
+  (
+    cd "$source_root"
+    ./configure \
+      --prefix="$BFNEW_TOOLS" \
+      --with-system-libdir=/lib:/usr/lib:/usr/lib/x86_64-linux-gnu \
+      --with-system-includedir=/usr/include \
+      --with-pkg-config-dir="$BFNEW_TOOLS/lib/pkgconfig:/usr/local/lib/pkgconfig:/usr/local/share/pkgconfig:/usr/lib/x86_64-linux-gnu/pkgconfig:/usr/lib/pkgconfig:/usr/share/pkgconfig"
+    make -j4
+    make install
+  )
+  [[ -x "$pkgconf" ]] || die "pkgconf installation produced no executable."
+  [[ ! -e "$pkg_config" && ! -L "$pkg_config" ]] ||
+    die "$pkg_config unexpectedly appeared during pkgconf installation."
+  ln -s pkgconf "$pkg_config"
+  "$pkg_config" --version >/dev/null
+  trap - EXIT
+  rm -rf -- "$staging_root"
+  log "Installed pkg-config at $pkg_config"
 }
 
 clone_bfnew() {
@@ -309,6 +388,7 @@ configure_persistent_environment() {
     printf 'export WORKLOAD_ROOT=%q\n' "$BFNEW_DIR/out/aup-workload"
     printf 'export EVIDENCE=%q\n' "$BFNEW_DIR/build/aup-evidence"
     printf 'export ROCM_PATH=%q\n' "$rocm_root"
+    printf 'export PKG_CONFIG=%q\n' "$BFNEW_TOOLS/bin/pkg-config"
     printf '%s\n' \
       'export PATH="$BFNEW_TOOLS/bin:$ROCM_PATH/bin:$PATH"' \
       'export LD_LIBRARY_PATH="$BFNEW_TOOLS/lib:$ROCM_PATH/lib:$ROCM_PATH/lib64:${LD_LIBRARY_PATH:-}"' \
@@ -343,6 +423,7 @@ main() {
 
   mkdir -p "$AUP_WORKSPACE_ROOT" "$DOWNLOAD_CACHE" "$BFNEW_TOOLS"
   clone_bfnew
+  install_pkg_config
   prepare_contest_data
   configure_persistent_environment
 
