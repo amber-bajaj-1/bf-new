@@ -69,8 +69,7 @@ class ReusableBatchedJacobiWorkspace::Impl final {
   [[nodiscard]] bool reserve(
       const BatchDeviceDescription& batch,
       const std::size_t scratch_bytes,
-      const std::uint32_t csc_run_count,
-      const InstrumentationLevel instrumentation_level) {
+      const std::uint32_t csc_run_count) {
     if (lease_active) {
       throw std::logic_error{
           "retire the active batched Jacobi lease before reserving"};
@@ -95,19 +94,15 @@ class ReusableBatchedJacobiWorkspace::Impl final {
         bytes<std::uint32_t>(batch.selected_vertex_ranges.size() + 1U));
     grow(controller, sizeof(DeviceController));
     grow(status, sizeof(DeviceRunStatus));
-    grow(
-        instrumentation,
-        instrumentation_level == InstrumentationLevel::none
-            ? 0U
-            : sizeof(DeviceWorkStatistics));
+    // These two records are fixed-size and tiny. Reserve them with the first
+    // batch so a later evidence replay cannot introduce allocator activity
+    // into an otherwise warmed workspace. None instrumentation still exposes
+    // null device pointers and performs no statistics clears or updates.
+    grow(instrumentation, sizeof(DeviceWorkStatistics));
     grow(
         lane_convergence_rounds,
         bytes<std::uint64_t>(batch.lane_width));
-    grow(
-        batch_statistics,
-        instrumentation_level == InstrumentationLevel::none
-            ? 0U
-            : sizeof(detail::DeviceBatchJacobiStatistics));
+    grow(batch_statistics, sizeof(detail::DeviceBatchJacobiStatistics));
     grow(engine_scratch, scratch_bytes);
     if (grew) {
       ++allocation_events;
@@ -214,8 +209,7 @@ void ReusableBatchedJacobiWorkspace::prepare_async(
     throw std::invalid_argument{"batched Jacobi union has no vertices"};
   }
 
-  static_cast<void>(impl_->reserve(
-      batch, scratch_bytes, csc_run_count, options.instrumentation));
+  static_cast<void>(impl_->reserve(batch, scratch_bytes, csc_run_count));
   if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
     throw std::overflow_error{"batched Jacobi workspace generation overflow"};
   }

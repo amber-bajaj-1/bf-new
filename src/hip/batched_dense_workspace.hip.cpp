@@ -71,8 +71,7 @@ class ReusableBatchedDenseWorkspace::Impl final {
 
   [[nodiscard]] bool reserve(
       const BatchDeviceDescription& batch,
-      const std::size_t scratch_bytes,
-      const InstrumentationLevel instrumentation_level) {
+      const std::size_t scratch_bytes) {
     if (lease_active) {
       throw std::logic_error{
           "retire the active batched dense lease before reserving"};
@@ -98,19 +97,14 @@ class ReusableBatchedDenseWorkspace::Impl final {
         bytes<std::uint32_t>(batch.selected_vertex_ranges.size() + 1U));
     grow(controller, sizeof(DeviceController));
     grow(status, sizeof(DeviceRunStatus));
-    grow(
-        instrumentation,
-        instrumentation_level == InstrumentationLevel::none
-            ? 0U
-            : sizeof(DeviceWorkStatistics));
+    // Keep evidence-only records resident after the first compact batch.
+    // None instrumentation leaves them untouched and keeps their device
+    // pointers hidden, while a later evidence replay remains allocation-free.
+    grow(instrumentation, sizeof(DeviceWorkStatistics));
     grow(
         lane_convergence_rounds,
         bytes<std::uint64_t>(batch.lane_width));
-    grow(
-        batch_statistics,
-        instrumentation_level == InstrumentationLevel::none
-            ? 0U
-            : sizeof(detail::DeviceBatchDenseStatistics));
+    grow(batch_statistics, sizeof(detail::DeviceBatchDenseStatistics));
     grow(engine_scratch, scratch_bytes);
     if (grew) {
       ++allocation_events;
@@ -217,7 +211,7 @@ void ReusableBatchedDenseWorkspace::prepare_async(
     throw std::invalid_argument{"batched dense union has no vertices"};
   }
 
-  static_cast<void>(impl_->reserve(batch, scratch_bytes, options.instrumentation));
+  static_cast<void>(impl_->reserve(batch, scratch_bytes));
   if (impl_->generation == std::numeric_limits<std::uint64_t>::max()) {
     throw std::overflow_error{"batched dense workspace generation overflow"};
   }
