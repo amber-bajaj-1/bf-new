@@ -179,7 +179,11 @@ if(BFNEW_ENABLE_FPGAIF)
     "${BFNEW_FPGA24_SCHEMA_ROOT}/DeviceResources.capnp"
     "${BFNEW_FPGA24_SCHEMA_ROOT}/PhysicalNetlist.capnp"
   )
-  foreach(_bfnew_schema IN LISTS _bfnew_fpgaif_schemas)
+  set(_bfnew_fpgaif_required_schemas
+    ${_bfnew_fpgaif_schemas}
+    "${BFNEW_FPGA24_SCHEMA_ROOT}/capnp/java.capnp"
+  )
+  foreach(_bfnew_schema IN LISTS _bfnew_fpgaif_required_schemas)
     if(NOT EXISTS "${_bfnew_schema}")
       message(FATAL_ERROR "Required FPGA Interchange schema is missing: ${_bfnew_schema}")
     endif()

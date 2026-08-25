@@ -227,7 +227,8 @@ contest_data_is_ready() {
     References.capnp \
     LogicalNetlist.capnp \
     DeviceResources.capnp \
-    PhysicalNetlist.capnp; do
+    PhysicalNetlist.capnp \
+    capnp/java.capnp; do
     [[ -s "$FPGA24_DIR/fpga-interchange-schema/interchange/$schema" ]] ||
       return 1
   done
@@ -250,7 +251,8 @@ report_missing_contest_artifacts() {
     References.capnp \
     LogicalNetlist.capnp \
     DeviceResources.capnp \
-    PhysicalNetlist.capnp; do
+    PhysicalNetlist.capnp \
+    capnp/java.capnp; do
     [[ -s "$FPGA24_DIR/fpga-interchange-schema/interchange/$schema" ]] ||
       printf '  missing: %s\n' \
         "$FPGA24_DIR/fpga-interchange-schema/interchange/$schema" >&2
