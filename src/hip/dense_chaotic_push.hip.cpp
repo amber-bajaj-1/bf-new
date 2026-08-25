@@ -43,6 +43,15 @@ void check(
   return left * right;
 }
 
+[[nodiscard]] unsigned int checked_cooperative_shared_bytes(
+    const std::size_t shared_bytes) {
+  if (shared_bytes > std::numeric_limits<unsigned int>::max()) {
+    throw std::overflow_error{
+        "dense dynamic shared-memory request exceeds the HIP cooperative-launch ABI"};
+  }
+  return static_cast<unsigned int>(shared_bytes);
+}
+
 [[nodiscard]] std::uint32_t checked_grid_blocks(
     const std::uint32_t blocks_per_wgp,
     const std::uint32_t wgp_count) {
@@ -756,13 +765,15 @@ void launch_persistent(
       options.instrumentation == InstrumentationLevel::none
           ? reinterpret_cast<const void*>(dense_persistent_none_kernel)
           : reinterpret_cast<const void*>(dense_persistent_instrumented_kernel);
+  const unsigned int launch_shared_bytes =
+      checked_cooperative_shared_bytes(shared_bytes);
   check(
       hipLaunchCooperativeKernel(
           kernel,
           dim3(grid.blocks),
           dim3(options.block_size),
           arguments,
-          shared_bytes,
+          launch_shared_bytes,
           stream),
       options.instrumentation == InstrumentationLevel::none
           ? "hipLaunchCooperativeKernel(dense None persistent)"
