@@ -1,8 +1,7 @@
 #include "bfnew/hip/dense_chaotic_push.hpp"
 
 #include <hip/hip_runtime.h>
-
-#include <cooperative_groups.h>
+#include <hip/hip_cooperative_groups.h>
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +17,7 @@
 namespace bfnew::hip {
 namespace {
 
-namespace cg = cooperative_groups;
+namespace cg = ::cooperative_groups;
 
 constexpr LaneMask standalone_lane = LaneMask{1U};
 constexpr std::uint32_t positive_infinity_bits = 0x7f800000U;

@@ -6,8 +6,7 @@
 #include "batched_dense_workspace_internal.hpp"
 
 #include <hip/hip_runtime.h>
-
-#include <cooperative_groups.h>
+#include <hip/hip_cooperative_groups.h>
 
 #include <algorithm>
 #include <bit>
@@ -25,7 +24,7 @@
 namespace bfnew::hip {
 namespace {
 
-namespace cg = cooperative_groups;
+namespace cg = ::cooperative_groups;
 
 inline constexpr std::uint32_t phase15_wave_width = 32U;
 inline constexpr std::uint32_t positive_infinity_bits = 0x7f800000U;

@@ -1,8 +1,7 @@
 #include "bfnew/hip/jacobi.hpp"
 
 #include <hip/hip_runtime.h>
-
-#include <cooperative_groups.h>
+#include <hip/hip_cooperative_groups.h>
 
 #include <algorithm>
 #include <bit>
@@ -20,7 +19,7 @@
 namespace bfnew::hip {
 namespace {
 
-namespace cg = cooperative_groups;
+namespace cg = ::cooperative_groups;
 
 constexpr LaneMask standalone_lane = LaneMask{1U};
 
