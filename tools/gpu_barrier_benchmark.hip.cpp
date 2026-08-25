@@ -15,8 +15,6 @@
 #include <string_view>
 #include <vector>
 
-namespace cooperative_groups = ::cooperative_groups;
-
 namespace {
 
 struct Options {
