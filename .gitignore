@@ -1,0 +1,14 @@
+# Local build and benchmark artifacts. These are regenerated on the AUP host.
+/build/
+/out/
+
+# CMake files from accidental in-source builds.
+/CMakeCache.txt
+/CMakeFiles/
+/cmake_install.cmake
+/compile_commands.json
+
+# Editor and operating-system metadata.
+.DS_Store
+*.swp
+*.tmp
